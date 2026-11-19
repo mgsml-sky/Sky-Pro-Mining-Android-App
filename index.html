@@ -693,7 +693,11 @@
                 return;
             }
 
-            executeMiningClaim();
+            if (window.AndroidBridge && typeof window.AndroidBridge.showMiningAd === 'function') {
+                window.AndroidBridge.showMiningAd();
+            } else {
+                executeMiningClaim();
+            }
         }
 
         async function executeMiningClaim() {
