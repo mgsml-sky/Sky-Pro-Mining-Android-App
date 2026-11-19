@@ -25,6 +25,12 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
         db.enablePersistence().catch((err) => console.log("Persistence note:", err.code));
+
+        // AdMob Rewarded Ad Configuration (Test ID default - replace with your live Rewarded Ad Unit ID when ready)
+        const ADMOB_CONFIG = {
+            rewardedAdUnitId: "ca-app-pub-3940256099942544/5224354917",
+            requireBridgeForReward: true
+        };
     </script>
 
     <style>
@@ -364,6 +370,7 @@
         let adminSecretPin = "1234"; 
         let registeredUserEmail = "user@gmail.com";
         let isMiningAdInProgress = false;
+        let adAuthorizedClaim = false;
         const MINING_COOLDOWN = 3 * 60 * 60 * 1000; 
 
         const canvas = document.getElementById('refinery-canvas');
@@ -699,29 +706,53 @@
                 return;
             }
 
+            adAuthorizedClaim = false;
+
             if (window.AndroidBridge && typeof window.AndroidBridge.showMiningAd === 'function') {
                 isMiningAdInProgress = true;
                 document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Loading Rewarded Ad...</span>";
                 try {
-                    window.AndroidBridge.showMiningAd();
+                    if (window.AndroidBridge.showMiningAd.length >= 1) {
+                        window.AndroidBridge.showMiningAd(ADMOB_CONFIG.rewardedAdUnitId);
+                    } else {
+                        window.AndroidBridge.showMiningAd();
+                    }
                 } catch (err) {
                     isMiningAdInProgress = false;
-                    document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Ad Bridge Error - Please try again</span>";
+                    adAuthorizedClaim = false;
+                    document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Ad Bridge Error - Try Again</span>";
                     alert('Ad Bridge Error: ' + err.message);
                 }
-            } else {
+            } else if (!ADMOB_CONFIG.requireBridgeForReward) {
+                adAuthorizedClaim = true;
                 executeMiningClaim();
+            } else {
+                document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Android AdMob Bridge Not Found</span>";
+                alert('Rewarded Ad bridge not found. Open inside your Android app with AdMob bridge configured.');
             }
+        }
+
+        function onMiningAdRewardEarned() {
+            adAuthorizedClaim = true;
+            executeMiningClaim();
         }
 
         function onMiningAdClosedOrFailed(reasonText) {
             isMiningAdInProgress = false;
-            document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Ad not completed - Claim cancelled</span>";
+            adAuthorizedClaim = false;
+            document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Ad not completed - Reward locked</span>";
             alert(reasonText || 'Please watch the full reward ad to claim SKY mining reward.');
         }
 
         async function executeMiningClaim() {
+            if (ADMOB_CONFIG.requireBridgeForReward && !adAuthorizedClaim) {
+                isMiningAdInProgress = false;
+                document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Reward blocked - Ad verification required</span>";
+                return;
+            }
+
             isMiningAdInProgress = false;
+            adAuthorizedClaim = false;
             if (globalTotalSupply <= 0) return;
 
             skyBalance += miningRewardQty;
