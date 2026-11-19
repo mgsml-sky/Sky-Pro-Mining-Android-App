@@ -363,6 +363,7 @@
         let transferFeatureEnabled = false; 
         let adminSecretPin = "1234"; 
         let registeredUserEmail = "user@gmail.com";
+        let isMiningAdInProgress = false;
         const MINING_COOLDOWN = 3 * 60 * 60 * 1000; 
 
         const canvas = document.getElementById('refinery-canvas');
@@ -685,6 +686,11 @@
                 return;
             }
 
+            if (isMiningAdInProgress) {
+                alert('Ad is already loading/playing. Please wait...');
+                return;
+            }
+
             const lastMining = localStorage.getItem('last_mining_time_sky_' + activeUserId);
             const now = new Date().getTime();
 
@@ -694,13 +700,28 @@
             }
 
             if (window.AndroidBridge && typeof window.AndroidBridge.showMiningAd === 'function') {
-                window.AndroidBridge.showMiningAd();
+                isMiningAdInProgress = true;
+                document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Loading Rewarded Ad...</span>";
+                try {
+                    window.AndroidBridge.showMiningAd();
+                } catch (err) {
+                    isMiningAdInProgress = false;
+                    document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Ad Bridge Error - Please try again</span>";
+                    alert('Ad Bridge Error: ' + err.message);
+                }
             } else {
                 executeMiningClaim();
             }
         }
 
+        function onMiningAdClosedOrFailed(reasonText) {
+            isMiningAdInProgress = false;
+            document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Ad not completed - Claim cancelled</span>";
+            alert(reasonText || 'Please watch the full reward ad to claim SKY mining reward.');
+        }
+
         async function executeMiningClaim() {
+            isMiningAdInProgress = false;
             if (globalTotalSupply <= 0) return;
 
             skyBalance += miningRewardQty;
