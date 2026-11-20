@@ -26,9 +26,9 @@
         const auth = firebase.auth();
         db.enablePersistence().catch((err) => console.log("Persistence note:", err.code));
 
-        // AdMob Rewarded Ad Configuration (Test ID default - replace with your live Rewarded Ad Unit ID when ready)
+        // AdMob Rewarded Ad Configuration (Live Rewarded Ad Unit ID configured)
         const ADMOB_CONFIG = {
-            rewardedAdUnitId: "ca-app-pub-3940256099942544/5224354917",
+            rewardedAdUnitId: "ca-app-pub-7041514954925143/3684532392",
             requireBridgeForReward: true
         };
     </script>
@@ -371,6 +371,7 @@
         let registeredUserEmail = "user@gmail.com";
         let isMiningAdInProgress = false;
         let adAuthorizedClaim = false;
+        let pendingRewardAfterClose = false;
         const MINING_COOLDOWN = 3 * 60 * 60 * 1000; 
 
         const canvas = document.getElementById('refinery-canvas');
@@ -707,10 +708,11 @@
             }
 
             adAuthorizedClaim = false;
+            pendingRewardAfterClose = false;
 
             if (window.AndroidBridge && typeof window.AndroidBridge.showMiningAd === 'function') {
                 isMiningAdInProgress = true;
-                document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Loading Rewarded Ad...</span>";
+                document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Watching Rewarded Ad...</span>";
                 try {
                     if (window.AndroidBridge.showMiningAd.length >= 1) {
                         window.AndroidBridge.showMiningAd(ADMOB_CONFIG.rewardedAdUnitId);
@@ -720,6 +722,7 @@
                 } catch (err) {
                     isMiningAdInProgress = false;
                     adAuthorizedClaim = false;
+                    pendingRewardAfterClose = false;
                     document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Ad Bridge Error - Try Again</span>";
                     alert('Ad Bridge Error: ' + err.message);
                 }
@@ -732,27 +735,39 @@
             }
         }
 
+        // Called when full ad is watched; waits until user taps close (X) to credit & start mining
         function onMiningAdRewardEarned() {
-            adAuthorizedClaim = true;
-            executeMiningClaim();
+            pendingRewardAfterClose = true;
+            document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Ad Completed - Tap Close (X) to Start Mining</span>";
         }
 
+        // Called when user closes (X) or dismisses the ad
         function onMiningAdClosedOrFailed(reasonText) {
             isMiningAdInProgress = false;
+
+            if (pendingRewardAfterClose) {
+                pendingRewardAfterClose = false;
+                adAuthorizedClaim = true;
+                executeMiningClaim();
+                return;
+            }
+
             adAuthorizedClaim = false;
-            document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Ad not completed - Reward locked</span>";
-            alert(reasonText || 'Please watch the full reward ad to claim SKY mining reward.');
+            document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Ad closed early - Reward & Mining not started</span>";
+            alert(reasonText || 'Please watch the full ad and close it to claim SKY reward and start 3H mining.');
         }
 
         async function executeMiningClaim() {
             if (ADMOB_CONFIG.requireBridgeForReward && !adAuthorizedClaim) {
                 isMiningAdInProgress = false;
-                document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Reward blocked - Ad verification required</span>";
+                pendingRewardAfterClose = false;
+                document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Reward blocked - Complete full ad first</span>";
                 return;
             }
 
             isMiningAdInProgress = false;
             adAuthorizedClaim = false;
+            pendingRewardAfterClose = false;
             if (globalTotalSupply <= 0) return;
 
             skyBalance += miningRewardQty;
@@ -779,8 +794,8 @@
             document.getElementById('header-sky-bal').innerText = skyBalance;
             updateSupplyDisplay();
 
-            document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>24K Pure Migration Credited!</span>";
-            alert(`3-Hour Refinery Completed! +${miningRewardQty} Pure SKY 24K Migrated.`);
+            document.getElementById('factory-status-msg').innerHTML = "Machine Status: <span>Reward Credited & 3H Mining Started!</span>";
+            alert(`Ad Completed! +${miningRewardQty} SKY added to wallet and 3-Hour Mining started.`);
             startCountdownTimer(MINING_COOLDOWN);
         }
 
